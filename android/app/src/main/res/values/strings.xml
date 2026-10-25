@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nomio</string>
+    <string name="title_activity_main">Nomio</string>
+    <string name="package_name">mx.nomio.app</string>
+    <string name="custom_url_scheme">mx.nomio.app</string>
+</resources>

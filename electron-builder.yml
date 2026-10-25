@@ -1,0 +1,31 @@
+appId: mx.nomio.app
+productName: Nomio
+copyright: "Copyright © 2025 Nomio"
+
+directories:
+  output: dist-electron
+
+# Only pack the electron shell — no Next.js or node_modules needed
+files:
+  - electron/**/*
+  - public/icons/icon-512.png
+  - "!node_modules/**/*"
+
+win:
+  icon: public/icons/icon-512.png
+  artifactName: "Nomio-Setup.exe"
+  target:
+    - target: nsis
+      arch: x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Nomio
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+
+publish: null

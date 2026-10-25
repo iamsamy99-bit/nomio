@@ -1,0 +1,77 @@
+name: Build Nomio Windows Installer
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build NSIS Installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set Electron server URL
+        shell: bash
+        run: echo "ELECTRON_SERVER_URL=${{ vars.ELECTRON_SERVER_URL || 'https://your-domain.vercel.app' }}" >> $GITHUB_ENV
+
+      - name: Build Windows installer
+        run: npm run electron:build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # DEBUG (push to main)
+      - name: Upload Debug installer
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: nomio-windows-debug-${{ github.sha }}
+          path: dist-electron/*.exe
+          retention-days: 14
+
+      # RELEASE (tag v*)
+      - name: Upload Release installer
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: nomio-windows-${{ github.ref_name }}
+          path: dist-electron/*.exe
+          retention-days: 90
+
+      # Publica en el repo PUBLICO nomio-releases (este repo es privado y sus
+      # assets no son descargables anonimamente). Requiere secret RELEASES_TOKEN:
+      # PAT fine-grained con acceso solo a nomio-releases, permiso Contents read/write.
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          repository: iamsamy99-bit/nomio-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          files: dist-electron/*.exe
+          name: Nomio ${{ github.ref_name }}
+          body: |
+            ## Nomio Windows ${{ github.ref_name }}
+
+            Instalador NSIS para Windows 10/11 (64-bit).
+            Requiere conexion a internet — la app carga desde https://your-domain.vercel.app
+
+            > **Nota:** En el primer lanzamiento Windows puede mostrar una advertencia SmartScreen.
+            > Haz clic en "Mas informacion" → "Ejecutar de todas formas" para continuar.
+            > Esto desaparecera una vez que el instalador tenga suficientes descargas o se firme con certificado EV.

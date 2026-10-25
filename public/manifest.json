@@ -1,0 +1,19 @@
+{
+  "name": "Nomiextra — Nómina para Constructoras",
+  "short_name": "Nomiextra",
+  "description": "Gestión de nómina, asistencia y cotizaciones para empresas constructoras mexicanas.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#020817",
+  "theme_color": "#06B6D4",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "screenshots": [],
+  "categories": ["business", "finance", "productivity"],
+  "lang": "es-MX",
+  "dir": "ltr",
+  "scope": "/"
+}

@@ -1,0 +1,132 @@
+name: Build Nomio Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Build release firmado?'
+        type: boolean
+        default: false
+
+jobs:
+  build-apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+
+      - run: npm ci
+
+      - name: Set Capacitor server URL
+        run: echo "CAPACITOR_SERVER_URL=${{ vars.CAPACITOR_SERVER_URL || 'https://your-domain.vercel.app' }}" >> $GITHUB_ENV
+
+      - name: Ensure Android platform
+        run: |
+          if [ ! -d "android" ]; then npx cap add android; fi
+
+      # The app loads a remote server.url, so it has no static export. `cap sync`
+      # still requires webDir ('out') to exist, so create a minimal fallback that
+      # redirects to production if the WebView ever loads the local index.
+      - name: Stub webDir (remote-URL app)
+        run: |
+          mkdir -p out
+          if [ ! -f out/index.html ]; then
+            echo '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url='"${CAPACITOR_SERVER_URL}"'"><title>Nomiextra</title>' > out/index.html
+          fi
+
+      - run: npx cap sync android
+
+      # DEBUG APK — always built (sideloadable, no signing required)
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Debug APK (artifact)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: nomio-debug-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      # SIGNED RELEASE — tags only, requires keystore secrets
+      - name: Decode keystore
+        id: keystore
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
+        continue-on-error: true
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/nomio-release.keystore
+
+      - name: Configure signing
+        if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true') && steps.keystore.outcome == 'success'
+        run: |
+          cat >> android/gradle.properties <<EOF
+          NOMIO_KEYSTORE_FILE=nomio-release.keystore
+          NOMIO_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          NOMIO_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}
+          NOMIO_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build Release APK
+        if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true') && steps.keystore.outcome == 'success'
+        working-directory: android
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Upload Release artifacts
+        if: (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true') && steps.keystore.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: nomio-release-${{ github.ref_name }}
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 90
+
+      # GitHub Release — always includes debug APK; signed APK added if keystore succeeded
+      - name: Create GitHub Release (debug only)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.keystore.outcome != 'success'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          generate_release_notes: true
+          name: Nomio ${{ github.ref_name }}
+          body: |
+            ## Nomio Android ${{ github.ref_name }}
+
+            APK de depuracion para instalacion directa (sideload).
+            Para instalar: habilita "Fuentes desconocidas" en Android -> instala el APK.
+            URL de produccion: https://your-domain.vercel.app
+
+      - name: Create GitHub Release (debug + signed)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.keystore.outcome == 'success'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+          generate_release_notes: true
+          name: Nomio ${{ github.ref_name }}
+          body: |
+            ## Nomio Android ${{ github.ref_name }}
+
+            APK firmado para distribucion directa.
+            Para Play Store usa `app-release.aab`.
+            URL de produccion: https://your-domain.vercel.app

@@ -1,0 +1,42 @@
+/**
+ * PATCH para android/app/build.gradle
+ *
+ * Después de `npx cap add android`, Capacitor genera
+ * `android/app/build.gradle`. Agrega este bloque `signingConfigs` y
+ * ajusta `buildTypes.release` para que use las variables del pipeline CI.
+ *
+ * Estas variables se inyectan desde GitHub Actions (ver .github/workflows/build-apk.yml).
+ */
+
+android {
+    // ... (config existente)
+
+    signingConfigs {
+        release {
+            if (project.hasProperty('NOMIO_KEYSTORE_FILE')) {
+                storeFile file(NOMIO_KEYSTORE_FILE)
+                storePassword NOMIO_KEYSTORE_PASSWORD
+                keyAlias NOMIO_KEY_ALIAS
+                keyPassword NOMIO_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (project.hasProperty('NOMIO_KEYSTORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    defaultConfig {
+        // Asegúrate de incrementar versionCode en cada tag v*
+        // y versionName igual que el tag.
+        // CI puede inyectar esto con: -PversionCode=123 -PversionName=1.2.0
+        versionCode project.hasProperty('versionCode') ? project.versionCode.toInteger() : 1
+        versionName project.hasProperty('versionName') ? project.versionName : '1.0.0'
+    }
+}
